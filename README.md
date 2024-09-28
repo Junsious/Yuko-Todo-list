@@ -50,9 +50,6 @@ Yuko Todo List is a simple and convenient task management application written in
 3. To delete a task, click the 🗑️ icon.
 4. Mark a task as completed using the checkbox next to the task.
 
-## Screenshots
-
-*(Screenshots of the application can be added here, if required)*
 
 ## License
 
