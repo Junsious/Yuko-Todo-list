@@ -3,44 +3,44 @@ use eframe::egui;
 use serde::{Deserialize, Serialize};
 use std::fs;
 
-// Файл, в который будут сохраняться задачи
+// File where tasks will be saved
 const SAVE_FILE: &str = "tasks.json";
 
 #[derive(Default, Serialize, Deserialize)]
 struct TodoApp {
-    tasks: Vec<Task>,               // Список задач
-    new_task: String,               // Новая задача
-    selected_task: Option<usize>,   // Выбранная задача для редактирования
+    tasks: Vec<Task>,               // List of tasks
+    new_task: String,               // New task
+    selected_task: Option<usize>,   // Selected task for editing
 }
 
 #[derive(Default, Serialize, Deserialize)]
 struct Task {
-    description: String, // Описание задачи
-    completed: bool,     // Статус завершенности задачи
+    description: String, // Task description
+    completed: bool,     // Task completion status
 }
 
 impl TodoApp {
-    // Метод для загрузки задач из файла
+    // Method for loading tasks from a file
     fn load_tasks() -> Self {
         if let Ok(data) = fs::read_to_string(SAVE_FILE) {
             if let Ok(app) = serde_json::from_str::<TodoApp>(&data) {
                 return app;
             }
         }
-        TodoApp::default() // Если чтение не удалось, возвращаем пустой список задач
+        TodoApp::default() // If reading fails, return an empty task list
     }
 
-    // Метод для сохранения задач в файл
+    // Method for saving tasks to a file
     fn save_tasks(&self) {
         if let Ok(data) = serde_json::to_string_pretty(self) {
-            let _ = fs::write(SAVE_FILE, data); // Игнорируем ошибку при записи
+            let _ = fs::write(SAVE_FILE, data); // Ignore the error when writing
         }
     }
 }
 
 impl eframe::App for TodoApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        // Устанавливаем стиль
+        // Setting the style
         ctx.set_style(egui::Style {
             visuals: egui::Visuals::dark(),
             ..Default::default()
@@ -50,71 +50,82 @@ impl eframe::App for TodoApp {
             ui.heading("To-Do List");
             ui.separator();
 
-            // Поле для ввода новой задачи
-            ui.horizontal(|ui| {
-                ui.add(egui::TextEdit::singleline(&mut self.new_task)
-                    .hint_text("Введите новую задачу...")
+            // Field for entering a new task (multiline input)
+            ui.vertical(|ui| {
+                ui.add(egui::TextEdit::multiline(&mut self.new_task)
+                    .hint_text("Enter a new task...")
+                    .desired_rows(3) // Set the desired number of rows
                     .desired_width(300.0));
-                if ui.button("Добавить задачу").clicked() {
+                if ui.button("Add Task").clicked() {
                     if !self.new_task.is_empty() {
-                        // Добавляем новую задачу в список
+                        // Add a new task to the list
                         self.tasks.push(Task {
                             description: self.new_task.clone(),
                             completed: false,
                         });
                         self.new_task.clear();
-                        self.save_tasks(); // Сохраняем задачи после добавления
+                        self.save_tasks(); // Save tasks after adding
                     }
                 }
             });
 
             ui.separator();
 
-            // Список задач
+            // Task list
             egui::ScrollArea::vertical().show(ui, |ui| {
                 ui.group(|ui| {
-                    ui.label("Список задач:");
+                    ui.label("Task list:");
                     let mut to_remove = Vec::new();
 
                     for (i, task) in self.tasks.iter_mut().enumerate() {
                         ui.horizontal(|ui| {
                             ui.checkbox(&mut task.completed, "");
 
-                            // Проверка, редактируется ли задача
+                            // Check if the task is being edited
                             if self.selected_task.map_or(false, |selected| selected == i) {
                                 ui.horizontal(|ui| {
                                     ui.label("✏️");
-                                    ui.text_edit_singleline(&mut task.description);
+                                    ui.add(
+                                        egui::TextEdit::multiline(&mut task.description)
+                                            .desired_rows(3) // Editing the task in multiline format
+                                            .desired_width(300.0),
+                                    );
                                 });
                             } else {
-                                ui.label(&task.description);
+                                // Display the task in multiline format
+                                ui.add(
+                                    egui::TextEdit::multiline(&mut task.description)
+                                        .desired_rows(3)  // Limit the number of rows
+                                        .desired_width(300.0)
+                                        .interactive(false), // Make the field read-only
+                                );
                             }
 
-                            // Кнопка "Редактировать"
-                            if ui.button("Редактировать").clicked() {
+                            // "Edit" button
+                            if ui.button("Edit").clicked() {
                                 self.selected_task = Some(i);
                             }
 
-                            // Кнопка "Удалить"
+                            // "Delete" button
                             if ui.button("🗑").clicked() {
                                 to_remove.push(i);
                             }
                         });
                     }
 
-                    // Удаление задач после итерации
+                    // Remove tasks after iteration
                     for index in to_remove.iter().rev() {
                         self.tasks.remove(*index);
-                        self.save_tasks(); // Сохраняем после удаления
+                        self.save_tasks(); // Save after deleting
                     }
                 });
             });
 
-            // Кнопка "Сохранить изменения" при редактировании
+            // "Save Changes" button when editing
             if self.selected_task.is_some() {
-                if ui.button("Сохранить изменения").clicked() {
+                if ui.button("Save Changes").clicked() {
                     self.selected_task = None;
-                    self.save_tasks(); // Сохраняем после редактирования
+                    self.save_tasks(); // Save after editing
                 }
             }
         });
@@ -123,7 +134,7 @@ impl eframe::App for TodoApp {
 
 fn main() {
     let options = eframe::NativeOptions::default();
-    let app = TodoApp::load_tasks(); // Загружаем задачи при старте приложения
+    let app = TodoApp::load_tasks(); // Load tasks at the start of the application
 
     eframe::run_native(
         "To-Do List",
