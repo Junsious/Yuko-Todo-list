@@ -1,5 +1,7 @@
 # Yuko Todo List
 
+- [RU version](https://github.com/Junsious/Yuko-Todo-list/blob/main/README_RU.md)
+
 Yuko Todo List is a simple and convenient task management application written in Rust using the `eframe` library. The application allows users to add, edit, delete tasks, and mark them as completed.
 
 ## Features
