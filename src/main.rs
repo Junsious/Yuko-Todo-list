@@ -9,14 +9,28 @@ const SAVE_FILE: &str = "tasks.json";
 #[derive(Default, Serialize, Deserialize)]
 struct TodoApp {
     tasks: Vec<Task>,               // List of tasks
-    new_task: String,               // New task
-    selected_task: Option<usize>,   // Selected task for editing
+    new_task: String,               // New task input
+    selected_task: Option<usize>,   // Task currently being edited
+    show_completed: bool,           // Option to toggle showing completed tasks
+    theme: Theme,                   // Light/Dark theme toggle
 }
 
 #[derive(Default, Serialize, Deserialize)]
 struct Task {
     description: String, // Task description
     completed: bool,     // Task completion status
+}
+
+#[derive(Serialize, Deserialize, PartialEq)]
+enum Theme {
+    Dark,
+    Light,
+}
+
+impl Default for Theme {
+    fn default() -> Self {
+        Theme::Dark
+    }
 }
 
 impl TodoApp {
@@ -36,13 +50,39 @@ impl TodoApp {
             let _ = fs::write(SAVE_FILE, data); // Ignore the error when writing
         }
     }
+
+    // Method to count completed tasks
+    fn completed_tasks(&self) -> usize {
+        self.tasks.iter().filter(|task| task.completed).count()
+    }
+
+    // Method to calculate task completion percentage
+    fn progress(&self) -> f32 {
+        if self.tasks.is_empty() {
+            0.0
+        } else {
+            (self.completed_tasks() as f32 / self.tasks.len() as f32) * 100.0
+        }
+    }
+
+    // Method to toggle the theme
+    fn toggle_theme(&mut self) {
+        self.theme = match self.theme {
+            Theme::Dark => Theme::Light,
+            Theme::Light => Theme::Dark,
+        };
+        self.save_tasks();
+    }
 }
 
 impl eframe::App for TodoApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        // Setting the style
+        // Set the theme
         ctx.set_style(egui::Style {
-            visuals: egui::Visuals::dark(),
+            visuals: match self.theme {
+                Theme::Dark => egui::Visuals::dark(),
+                Theme::Light => egui::Visuals::light(),
+            },
             ..Default::default()
         });
 
@@ -50,82 +90,104 @@ impl eframe::App for TodoApp {
             ui.heading("To-Do List");
             ui.separator();
 
-            // Field for entering a new task (multiline input)
+            // Theme toggle button
+            if ui.button("Toggle Theme").clicked() {
+                self.toggle_theme();
+            }
+
+            ui.horizontal(|ui| {
+                // Progress bar
+                let progress = self.progress() / 100.0;
+                ui.label(format!("Progress: {:.2}%", self.progress()));
+                ui.add(egui::ProgressBar::new(progress).desired_width(300.0));
+            });
+            
+            ui.separator();
+
+            // Field for entering a new task
             ui.vertical(|ui| {
                 ui.add(egui::TextEdit::multiline(&mut self.new_task)
                     .hint_text("Enter a new task...")
-                    .desired_rows(3) // Set the desired number of rows
+                    .desired_rows(3)
                     .desired_width(300.0));
+
                 if ui.button("Add Task").clicked() {
                     if !self.new_task.is_empty() {
-                        // Add a new task to the list
                         self.tasks.push(Task {
                             description: self.new_task.clone(),
                             completed: false,
                         });
                         self.new_task.clear();
-                        self.save_tasks(); // Save tasks after adding
+                        self.save_tasks(); // Auto-save
                     }
                 }
             });
 
             ui.separator();
 
+            // Show/Hide completed tasks toggle
+            ui.checkbox(&mut self.show_completed, "Show Completed Tasks");
+
             // Task list
             egui::ScrollArea::vertical().show(ui, |ui| {
-                ui.group(|ui| {
-                    ui.label("Task list:");
-                    let mut to_remove = Vec::new();
+                let mut to_remove = Vec::new();
 
-                    for (i, task) in self.tasks.iter_mut().enumerate() {
-                        ui.horizontal(|ui| {
-                            ui.checkbox(&mut task.completed, "");
+                for (i, task) in self.tasks.iter_mut().enumerate() {
+                    if !self.show_completed && task.completed {
+                        continue; // Skip completed tasks if not showing them
+                    }
 
-                            // Check if the task is being edited
-                            if self.selected_task.map_or(false, |selected| selected == i) {
-                                ui.horizontal(|ui| {
-                                    ui.label("✏️");
-                                    ui.add(
-                                        egui::TextEdit::multiline(&mut task.description)
-                                            .desired_rows(3) // Editing the task in multiline format
-                                            .desired_width(300.0),
-                                    );
-                                });
-                            } else {
-                                // Display the task in multiline format
+                    ui.horizontal(|ui| {
+                        ui.checkbox(&mut task.completed, "");
+
+                        // Check if the task is being edited
+                        if self.selected_task.map_or(false, |selected| selected == i) {
+                            ui.horizontal(|ui| {
                                 ui.add(
                                     egui::TextEdit::multiline(&mut task.description)
-                                        .desired_rows(3)  // Limit the number of rows
-                                        .desired_width(300.0)
-                                        .interactive(false), // Make the field read-only
+                                        .desired_rows(3)
+                                        .desired_width(300.0),
                                 );
-                            }
+                            });
+                        } else {
+                            ui.add(
+                                egui::TextEdit::multiline(&mut task.description)
+                                    .desired_rows(3)
+                                    .desired_width(300.0)
+                                    .interactive(false),
+                            );
+                        }
 
-                            // "Edit" button
-                            if ui.button("Edit").clicked() {
-                                self.selected_task = Some(i);
-                            }
+                        // "Edit" button
+                        if ui.button("Edit").clicked() {
+                            self.selected_task = Some(i);
+                        }
 
-                            // "Delete" button
-                            if ui.button("🗑").clicked() {
-                                to_remove.push(i);
-                            }
-                        });
-                    }
+                        // "Delete" button
+                        if ui.button("🗑").clicked() {
+                            to_remove.push(i);
+                        }
+                    });
+                }
 
-                    // Remove tasks after iteration
-                    for index in to_remove.iter().rev() {
-                        self.tasks.remove(*index);
-                        self.save_tasks(); // Save after deleting
-                    }
-                });
+                // Remove tasks after iteration
+                for index in to_remove.iter().rev() {
+                    self.tasks.remove(*index);
+                    self.save_tasks(); // Auto-save
+                }
             });
+
+            // "Clear Completed" button
+            if ui.button("Clear Completed").clicked() {
+                self.tasks.retain(|task| !task.completed);
+                self.save_tasks(); // Auto-save
+            }
 
             // "Save Changes" button when editing
             if self.selected_task.is_some() {
                 if ui.button("Save Changes").clicked() {
                     self.selected_task = None;
-                    self.save_tasks(); // Save after editing
+                    self.save_tasks(); // Auto-save
                 }
             }
         });
