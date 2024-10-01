@@ -10,6 +10,8 @@ Yuko Todo List is a simple and convenient task management application written in
 - Add new tasks
 - Edit existing tasks
 - Delete tasks
+- Progress bar for completing tasks
+- Turn on/off light/dark theme
 - Mark tasks as completed
 - Simple and intuitive interface
 
