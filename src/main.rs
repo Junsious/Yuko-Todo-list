@@ -83,7 +83,7 @@ impl TodoApp {
 
 impl eframe::App for TodoApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        // Set the theme
+        // Устанавливаем тему
         ctx.set_style(egui::Style {
             visuals: match self.theme {
                 Theme::Dark => egui::Visuals::dark(),
@@ -101,27 +101,32 @@ impl eframe::App for TodoApp {
                 ui.label(TodoApp::current_time());
             });
 
-            // Theme toggle button
+            // Кнопка для смены темы
             if ui.button("Toggle Theme").clicked() {
                 self.toggle_theme();
             }
 
             ui.horizontal(|ui| {
-                // Progress bar
+                // Полоса прогресса с анимацией
                 let progress = self.progress() / 100.0;
                 ui.label(format!("Progress: {:.2}%", self.progress()));
-                ui.add(egui::ProgressBar::new(progress).desired_width(300.0));
+                ui.add(egui::ProgressBar::new(progress)
+                    .animate(true)  // Включаем анимацию
+                    .desired_width(300.0)
+                );
             });
-            
+
             ui.separator();
 
-            // Field for entering a new task
+            // Поле ввода новой задачи с многострочным вводом
             ui.vertical(|ui| {
                 ui.add(egui::TextEdit::multiline(&mut self.new_task)
-                    .hint_text("Enter a new task...")
-                    .desired_rows(3)
-                    .desired_width(300.0));
+                    .hint_text("Enter a new task...") // Подсказка
+                    .desired_rows(3)                 // Три строки для ввода
+                    .desired_width(300.0)             // Ширина поля ввода
+                );
 
+                // Кнопка "Add Task" рядом с многострочным вводом
                 if ui.button("Add Task").clicked() {
                     if !self.new_task.is_empty() {
                         self.tasks.push(Task {
@@ -129,76 +134,79 @@ impl eframe::App for TodoApp {
                             completed: false,
                         });
                         self.new_task.clear();
-                        self.save_tasks(); // Auto-save
+                        self.save_tasks(); // Автосохранение
                     }
                 }
             });
 
             ui.separator();
 
-            // Show/Hide completed tasks toggle
+            // Флажок для отображения выполненных задач
             ui.checkbox(&mut self.show_completed, "Show Completed Tasks");
 
-            // Task list
+            // Список задач
             egui::ScrollArea::vertical().show(ui, |ui| {
                 let mut to_remove = Vec::new();
 
                 for (i, task) in self.tasks.iter_mut().enumerate() {
                     if !self.show_completed && task.completed {
-                        continue; // Skip completed tasks if not showing them
+                        continue; // Пропускаем выполненные задачи, если они не должны отображаться
                     }
 
                     ui.horizontal(|ui| {
+                        // Чекбокс выполнения задачи
                         ui.checkbox(&mut task.completed, "");
 
-                        // Check if the task is being edited
+                        // Если задача редактируется
                         if self.selected_task.map_or(false, |selected| selected == i) {
-                            ui.horizontal(|ui| {
-                                ui.add(
-                                    egui::TextEdit::multiline(&mut task.description)
-                                        .desired_rows(3)
-                                        .desired_width(300.0),
-                                );
-                            });
-                        } else {
-                            ui.add(
-                                egui::TextEdit::multiline(&mut task.description)
-                                    .desired_rows(3)
-                                    .desired_width(300.0)
-                                    .interactive(false),
+                            ui.add(egui::TextEdit::multiline(&mut task.description)
+                                .desired_rows(3)
+                                .desired_width(300.0),
                             );
+                        } else {
+                            let style = if task.completed {
+                                egui::TextEdit::multiline(&mut task.description)
+                                    .interactive(false)
+                                    .desired_width(300.0)
+                                    .text_color(egui::Color32::from_gray(120))  // Серый цвет для выполненных задач
+                            } else {
+                                egui::TextEdit::multiline(&mut task.description)
+                                    .interactive(false)
+                                    .desired_width(300.0)
+                            };
+                            ui.add(style);
                         }
 
-                        // "Edit" button
-                        if ui.button("Edit").clicked() {
+                        // Кнопка "Edit"
+                        if ui.button("✏️").on_hover_text("Edit Task").clicked() {
                             self.selected_task = Some(i);
                         }
 
-                        // "Delete" button
-                        if ui.button("🗑").clicked() {
+                        // Кнопка "Delete" с подсказкой
+                        if ui.button("🗑").on_hover_text("Delete Task").clicked() {
                             to_remove.push(i);
                         }
                     });
                 }
 
-                // Remove tasks after iteration
+                // Удаляем задачи после итерации
                 for index in to_remove.iter().rev() {
                     self.tasks.remove(*index);
-                    self.save_tasks(); // Auto-save
+                    self.save_tasks(); // Автосохранение
                 }
             });
 
-            // "Clear Completed" button
-            if ui.button("Clear Completed").clicked() {
+            // Кнопка "Clear Completed"
+            if ui.button("Clear Completed").on_hover_text("Remove all completed tasks").clicked() {
                 self.tasks.retain(|task| !task.completed);
-                self.save_tasks(); // Auto-save
+                self.save_tasks(); // Автосохранение
             }
 
-            // "Save Changes" button when editing
+            // Кнопка "Save Changes" при редактировании
             if self.selected_task.is_some() {
-                if ui.button("Save Changes").clicked() {
+                if ui.button("Save Changes").on_hover_text("Save task changes").clicked() {
                     self.selected_task = None;
-                    self.save_tasks(); // Auto-save
+                    self.save_tasks(); // Автосохранение
                 }
             }
         });
