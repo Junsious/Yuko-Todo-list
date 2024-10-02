@@ -1,7 +1,7 @@
-#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 use eframe::egui;
 use serde::{Deserialize, Serialize};
 use std::fs;
+use chrono::Local;  // Добавлено для получения системного времени
 
 // File where tasks will be saved
 const SAVE_FILE: &str = "tasks.json";
@@ -73,6 +73,12 @@ impl TodoApp {
         };
         self.save_tasks();
     }
+
+    // Method to get the current time as a formatted string
+    fn current_time() -> String {
+        let now = Local::now();
+        now.format("%H:%M:%S").to_string()  // Получаем текущее время в формате ЧЧ:ММ:СС
+    }
 }
 
 impl eframe::App for TodoApp {
@@ -89,6 +95,11 @@ impl eframe::App for TodoApp {
         egui::CentralPanel::default().show(ctx, |ui| {
             ui.heading("To-Do List");
             ui.separator();
+
+            // Отображение времени в правом верхнем углу
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::TOP), |ui| {
+                ui.label(TodoApp::current_time());
+            });
 
             // Theme toggle button
             if ui.button("Toggle Theme").clicked() {
@@ -191,6 +202,9 @@ impl eframe::App for TodoApp {
                 }
             }
         });
+
+        // Запрашиваем перерисовку каждый кадр, чтобы время обновлялось
+        ctx.request_repaint();
     }
 }
 
