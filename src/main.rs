@@ -1,24 +1,25 @@
 use eframe::egui;
 use serde::{Deserialize, Serialize};
 use std::fs;
-use chrono::Local;  // Добавлено для получения системного времени
+use chrono::Local;  // Для получения системного времени
 
-// File where tasks will be saved
+// Файл, в который будут сохраняться задачи
 const SAVE_FILE: &str = "tasks.json";
 
 #[derive(Default, Serialize, Deserialize)]
 struct TodoApp {
-    tasks: Vec<Task>,               // List of tasks
-    new_task: String,               // New task input
-    selected_task: Option<usize>,   // Task currently being edited
-    show_completed: bool,           // Option to toggle showing completed tasks
-    theme: Theme,                   // Light/Dark theme toggle
+    tasks: Vec<Task>,               // Список задач
+    new_task: String,               // Ввод новой задачи
+    selected_task: Option<usize>,   // Редактируемая задача
+    show_completed: bool,           // Флаг отображения выполненных задач
+    search_query: String,           // Поисковый запрос
+    theme: Theme,                   // Текущая тема (светлая/темная)
 }
 
 #[derive(Default, Serialize, Deserialize)]
 struct Task {
-    description: String, // Task description
-    completed: bool,     // Task completion status
+    description: String, // Описание задачи
+    completed: bool,     // Статус выполнения задачи
 }
 
 #[derive(Serialize, Deserialize, PartialEq)]
@@ -34,29 +35,29 @@ impl Default for Theme {
 }
 
 impl TodoApp {
-    // Method for loading tasks from a file
+    // Метод для загрузки задач из файла
     fn load_tasks() -> Self {
         if let Ok(data) = fs::read_to_string(SAVE_FILE) {
             if let Ok(app) = serde_json::from_str::<TodoApp>(&data) {
                 return app;
             }
         }
-        TodoApp::default() // If reading fails, return an empty task list
+        TodoApp::default() // Если чтение не удалось, возвращаем пустой список задач
     }
 
-    // Method for saving tasks to a file
+    // Метод для сохранения задач в файл
     fn save_tasks(&self) {
         if let Ok(data) = serde_json::to_string_pretty(self) {
-            let _ = fs::write(SAVE_FILE, data); // Ignore the error when writing
+            let _ = fs::write(SAVE_FILE, data); // Игнорируем ошибку при записи
         }
     }
 
-    // Method to count completed tasks
+    // Подсчет количества выполненных задач
     fn completed_tasks(&self) -> usize {
         self.tasks.iter().filter(|task| task.completed).count()
     }
 
-    // Method to calculate task completion percentage
+    // Процент выполнения задач
     fn progress(&self) -> f32 {
         if self.tasks.is_empty() {
             0.0
@@ -65,7 +66,7 @@ impl TodoApp {
         }
     }
 
-    // Method to toggle the theme
+    // Переключение темы
     fn toggle_theme(&mut self) {
         self.theme = match self.theme {
             Theme::Dark => Theme::Light,
@@ -74,16 +75,28 @@ impl TodoApp {
         self.save_tasks();
     }
 
-    // Method to get the current time as a formatted string
+    // Получение текущего времени в формате строки
     fn current_time() -> String {
         let now = Local::now();
-        now.format("%H:%M:%S").to_string()  // Получаем текущее время в формате ЧЧ:ММ:СС
+        now.format("%H:%M:%S").to_string()  // Текущее время в формате ЧЧ:ММ:СС
+    }
+
+    // Фильтрация задач по поисковому запросу
+    fn filtered_tasks(&self) -> Vec<(usize, &Task)> {
+        self.tasks.iter()
+            .enumerate()
+            .filter(|(_, task)| {
+                task.description
+                    .to_lowercase()
+                    .contains(&self.search_query.to_lowercase())
+            })
+            .collect()
     }
 }
 
 impl eframe::App for TodoApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        // Устанавливаем тему
+        // Установка темы интерфейса
         ctx.set_style(egui::Style {
             visuals: match self.theme {
                 Theme::Dark => egui::Visuals::dark(),
@@ -96,7 +109,7 @@ impl eframe::App for TodoApp {
             ui.heading("To-Do List");
             ui.separator();
 
-            // Отображение времени в правом верхнем углу
+            // Отображение текущего времени в правом верхнем углу
             ui.with_layout(egui::Layout::right_to_left(egui::Align::TOP), |ui| {
                 ui.label(TodoApp::current_time());
             });
@@ -118,15 +131,15 @@ impl eframe::App for TodoApp {
 
             ui.separator();
 
-            // Поле ввода новой задачи с многострочным вводом
+            // Поле для ввода новой задачи
             ui.vertical(|ui| {
                 ui.add(egui::TextEdit::multiline(&mut self.new_task)
-                    .hint_text("Enter a new task...") // Подсказка
-                    .desired_rows(3)                 // Три строки для ввода
-                    .desired_width(300.0)             // Ширина поля ввода
+                    .hint_text("Enter a new task...")  // Подсказка
+                    .desired_rows(3)                 // Количество строк
+                    .desired_width(300.0)            // Ширина поля
                 );
 
-                // Кнопка "Add Task" рядом с многострочным вводом
+                // Кнопка добавления задачи
                 if ui.button("Add Task").clicked() {
                     if !self.new_task.is_empty() {
                         self.tasks.push(Task {
@@ -141,21 +154,34 @@ impl eframe::App for TodoApp {
 
             ui.separator();
 
-            // Флажок для отображения выполненных задач
+            // Поисковая строка
+            ui.horizontal(|ui| {
+                ui.label("Search:");
+                ui.text_edit_singleline(&mut self.search_query);
+            });
+
+            // Флажок отображения выполненных задач
             ui.checkbox(&mut self.show_completed, "Show Completed Tasks");
 
-            // Список задач
+            // Список задач с фильтрацией
             egui::ScrollArea::vertical().show(ui, |ui| {
                 let mut to_remove = Vec::new();
+                let mut edit_task = None;
 
-                for (i, task) in self.tasks.iter_mut().enumerate() {
-                    if !self.show_completed && task.completed {
-                        continue; // Пропускаем выполненные задачи, если они не должны отображаться
-                    }
+                // Индексы задач для редактирования или удаления
+                let task_indices: Vec<usize> = self.filtered_tasks()
+                    .iter()
+                    .filter(|(_, task)| self.show_completed || !task.completed)
+                    .map(|(i, _)| *i)
+                    .collect();
 
+                // Отображение задач
+                for i in task_indices {
+                    let task = &mut self.tasks[i];
                     ui.horizontal(|ui| {
                         // Чекбокс выполнения задачи
-                        ui.checkbox(&mut task.completed, "");
+                        let checkbox_response = ui.checkbox(&mut task.completed, "");
+                        checkbox_response.changed(); // Отслеживаем изменения
 
                         // Если задача редактируется
                         if self.selected_task.map_or(false, |selected| selected == i) {
@@ -179,30 +205,35 @@ impl eframe::App for TodoApp {
 
                         // Кнопка "Edit"
                         if ui.button("✏️").on_hover_text("Edit Task").clicked() {
-                            self.selected_task = Some(i);
+                            edit_task = Some(i);
                         }
 
-                        // Кнопка "Delete" с подсказкой
+                        // Кнопка "Delete"
                         if ui.button("🗑").on_hover_text("Delete Task").clicked() {
                             to_remove.push(i);
                         }
                     });
                 }
 
-                // Удаляем задачи после итерации
+                // Удаление задач
                 for index in to_remove.iter().rev() {
                     self.tasks.remove(*index);
                     self.save_tasks(); // Автосохранение
                 }
+
+                // Режим редактирования задачи
+                if let Some(task_index) = edit_task {
+                    self.selected_task = Some(task_index);
+                }
             });
 
-            // Кнопка "Clear Completed"
+            // Кнопка для удаления выполненных задач
             if ui.button("Clear Completed").on_hover_text("Remove all completed tasks").clicked() {
                 self.tasks.retain(|task| !task.completed);
                 self.save_tasks(); // Автосохранение
             }
 
-            // Кнопка "Save Changes" при редактировании
+            // Кнопка для сохранения изменений
             if self.selected_task.is_some() {
                 if ui.button("Save Changes").on_hover_text("Save task changes").clicked() {
                     self.selected_task = None;
@@ -211,14 +242,14 @@ impl eframe::App for TodoApp {
             }
         });
 
-        // Запрашиваем перерисовку каждый кадр, чтобы время обновлялось
+        // Перерисовка интерфейса для обновления времени
         ctx.request_repaint();
     }
 }
 
 fn main() {
     let options = eframe::NativeOptions::default();
-    let app = TodoApp::load_tasks(); // Load tasks at the start of the application
+    let app = TodoApp::load_tasks(); // Загрузка задач при старте приложения
 
     eframe::run_native(
         "To-Do List",
